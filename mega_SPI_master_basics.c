@@ -2,7 +2,7 @@
  * mega_SPI_master_basics.c
  *
  * Created: 8.4.2024 18:00
- * Author : Glutex
+ * Author : 
  * Source : http://homepage.hispeed.ch/peterfleury/doxygen/avr-gcc-libraries/group__pfleury__lcd.html 
  *          http://homepage.hispeed.ch/peterfleury/avr-software.html
  */ 
