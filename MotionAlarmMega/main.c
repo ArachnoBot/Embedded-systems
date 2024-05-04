@@ -2,7 +2,6 @@
  * MotionAlarmMega.c
  *
  * Created: 25.4.2024 18.51.16
- * Author : Leevi
  */ 
 
 #define F_CPU 16000000UL
@@ -39,8 +38,9 @@
 volatile uint8_t state = 0;
 volatile uint8_t secondsElapsed = 0;
 
+// Save password to eeprom from the string given as parameter
 void
-savePassword(char password[]) {
+savePassword(char password[4]) {
 	// Loop four times to save each character of the password
 	for (uint8_t i = 0; i < 4; i++) {
 		while (EECR & (1 << EEPE));
@@ -52,6 +52,7 @@ savePassword(char password[]) {
 	return;
 }
 
+// Load password from eeprom to the string given as parameter
 void
 loadPassword(char password[4]) {
 	// Loop four times to get each character of the password
@@ -98,6 +99,7 @@ initTimers()
 	return;
 }
 
+// Timer 5 ISR for the 10 second timeout
 ISR(TIMER5_COMPA_vect) {
 	secondsElapsed++;
 }
@@ -134,7 +136,7 @@ receiveData(uint16_t timeout) {
 		_delay_ms(1);
 		if (timeElapsed > timeout)
 		{
-			return 255;
+			return TIMEOUT;
 		}
 	}
 	return UDR1;
@@ -177,6 +179,7 @@ getDistance()
 		tempDistance += TCNT4*0.2755392;
 	}
 	tempDistance /= 5;
+
 	// Make sure the 16 bit integer doesnt overflow the 8 bit one
 	if (tempDistance > 255)
 	{
@@ -186,6 +189,7 @@ getDistance()
 	return finalDistance;
 }
 
+// Try to connect to the atmega358p
 uint8_t 
 attemptConnection() {
 	uint8_t attempts = 0;
@@ -204,6 +208,7 @@ attemptConnection() {
 	return 0;
 }
 
+// Overwrite the password string given as parameter
 void
 setPassword(char password[4])
 {
@@ -248,6 +253,9 @@ setPassword(char password[4])
 	return;
 }
 
+// Have user input password and check if it is correct. First parameter is
+// the correct password saved in the system and the second is a flag that
+// shows whether the 10 second timer is running.
 uint8_t 
 checkPassword(char password[4], uint8_t timeoutEnabled)
 {
@@ -296,7 +304,7 @@ checkPassword(char password[4], uint8_t timeoutEnabled)
 			// Ignore other inputs
 		}
 	}
-	
+
 	// Check if the given password matches the real one
 	for (uint8_t i = 0; i < 4; i++)
 	{
@@ -306,16 +314,16 @@ checkPassword(char password[4], uint8_t timeoutEnabled)
 			break;
 		}
 	}
-	
 	// Inform the LCD whether the password was correct or not
-	if (passwordIsCorrect) {
+	if (passwordIsCorrect)
+	{
 		sendData(CORRECTPASS);
 	}
 	else
 	{
 		sendData(WRONGPASS);	
 	}
-	
+
 	_delay_ms(1000); // Delay so the message isnt immediately overwritten
 	return passwordIsCorrect;	
 }
@@ -324,7 +332,6 @@ int
 main(void)
 {
 	sei();
-	_delay_ms(2000); // REMEMBER TO REMOVE
 	
 	// Set used pins as inputs/outputs
 	DDRE |= (1 << TRIGGER_PIN);
@@ -343,7 +350,7 @@ main(void)
 	_delay_ms(500);
 	state = DISARMED;
 	
-	while (1) 
+	while (1)
 	{
 		switch (state)
 		{
@@ -353,7 +360,8 @@ main(void)
 				while (1)
 				{
 					char key = KEYPAD_GetKey();
-					if (key == '#') {
+					if (key == '#')
+					{
 						if(checkPassword(password, 0))
 						{
 							state = DISARMED;
@@ -365,7 +373,8 @@ main(void)
 							break;
 						}
 					}
-					else if (getDistance() < TRIGGER_DIST) {
+					else if (getDistance() < TRIGGER_DIST)
+					{
 						state = MOVEMENT;
 						break;
 					}
@@ -381,7 +390,8 @@ main(void)
 				{
 					char key = KEYPAD_GetKey();
 					// Wait until # to start inputting password
-					if (key == '#') {
+					if (key == '#')
+					{
 						if(checkPassword(password, 1))
 						{
 							state = DISARMED;
@@ -394,7 +404,8 @@ main(void)
 						}
 					}
 					// If no input is given, trigger the alarm
-					else if (secondsElapsed > ALARM_DELAY) {
+					else if (secondsElapsed > ALARM_DELAY)
+					{
 						sendData(ALARMTIMEOUT);
 						_delay_ms(1000);
 						state = TRIGGERED;
@@ -406,7 +417,7 @@ main(void)
 			case DISARMED:
 				sendData(DISARMED);
 				_delay_ms(INPUTDELAY);
-				while (1) 
+				while (1)
 				{
 					char key = KEYPAD_GetKey();
 					if (key == '*')

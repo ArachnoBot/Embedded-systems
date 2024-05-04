@@ -2,7 +2,6 @@
  * MotionAlarmUno.c
  *
  * Created: 25.4.2024 18.50.47
- * Author : Leevi
  */ 
 
 #define F_CPU 16000000UL
@@ -26,7 +25,6 @@
 #define WRONGPASS 254
 #define TIMEOUT 255
 
-// Function to initialize serial communication
 void 
 initSerial() 
 {
@@ -42,7 +40,7 @@ initSerial()
 	return;
 }
 
-// Send a some data to the atmega2560
+// Send a byte to the atmega2560
 void 
 sendData(uint8_t data)
 {
@@ -54,10 +52,11 @@ sendData(uint8_t data)
 	return;
 }
 
+// Receive a byte from the atmega2560, waiting for the message as many
+// milliseconds as the parameter "timeout" determines
 unsigned char 
 receiveData(uint16_t timeout) 
 {
-	PORTB |= (1 << PB5);
 	uint16_t timeElapsed = 0;
 	while (!(UCSR0A & (1 << RXC0)))
 	{
@@ -65,25 +64,26 @@ receiveData(uint16_t timeout)
 		_delay_ms(1);
 		if (timeElapsed > timeout)
 		{
-			PORTB &= ~(1 << PB5);
-			return 255;
+			return TIMEOUT;
 		}
 	}
-	PORTB &= ~(1 << PB5);
 	return UDR0;
 }
 
+// Try to connect to the atmega2560
 uint8_t 
 attemptConnection()
 {
 	uint8_t attempts = 0;
 	lcd_puts("Connecting...");
+	// Send value 111 up to 50 times, while listening for echo each time
 	while (attempts < 50)
 	{
 		sendData(111);
 		uint8_t response = receiveData(200);
 		if (response == 111)
 		{
+			// If we get 111 in response, the connection is established
 			return 1;
 		}
 		attempts += 1;
@@ -91,17 +91,79 @@ attemptConnection()
 	return 0;
 }
 
+// Update the LCD based on the inputs the user gives
+void
+handleKeypadInput()
+{
+	lcd_clrscr();
+	lcd_puts("Input password:");
+	lcd_gotoxy(0,1);
+	
+	uint8_t inputsGiven = 0;
+	char input = 0;
+	
+	while (input != '#')
+	{
+		input = receiveData(1000);
+		// Check if input is a character between 0-9
+		if (input > 47 && input < 58)
+		{
+			lcd_putc(input);
+			inputsGiven += 1;
+		}
+		// If # is pressed, erase character
+		else if (input == '*')
+		{
+			inputsGiven -= 1;
+			lcd_gotoxy(inputsGiven, 1);
+			lcd_putc(' ');
+			lcd_gotoxy(inputsGiven, 1);
+		}
+		else
+		{
+			// Ignore other inputs
+		}
+	}
+	
+	// Receive result of password input and display it
+	input = receiveData(5000);
+	lcd_clrscr();
+	switch (input) 
+	{
+		case SETPASSWORD:
+			lcd_puts("Password set");
+			break;
+			
+		case CORRECTPASS:
+			lcd_puts("Correct password");
+			break;
+			
+		case DISARMED:
+			lcd_puts("Alarm disarmed");
+			break;
+			
+		case WRONGPASS:
+			lcd_puts("Wrong password");
+			break;
+			
+		case ALARMTIMEOUT:
+			lcd_puts("Alarm timeout");
+			break;
+			
+		default:
+			lcd_puts("input error");
+			lcd_putc(input);
+			break;
+	}
+	return;
+}
+
 int
 main(void)
 {
-	// initialize display, cursor off
+	// initialize everything and connect to the atmega2560
 	lcd_init(LCD_DISP_ON);
-	
-	// Initialize serial connection
 	initSerial();
-	
-	_delay_ms(2000); // REMEMBER TO REMOVE
-	
 	if (attemptConnection())
 	{
 		lcd_clrscr();
@@ -114,8 +176,8 @@ main(void)
 		return 0;
 	}
 	
-    while (1) {
-	    uint8_t newState = receiveData(1000);
+	while (1) {
+		uint8_t newState = receiveData(1000);
 		
 		switch (newState) 
 		{
@@ -140,56 +202,7 @@ main(void)
 				break;
 				
 			case INPUT:
-				lcd_clrscr();
-				lcd_puts("Input password:");
-				lcd_gotoxy(0,1);
-				
-				uint8_t inputsGiven = 0;
-				char input = 0;
-				
-				while (input != '#') {
-					input = receiveData(1000);
-					if (input > 47 && input < 58) {
-						lcd_putc(input);
-						inputsGiven += 1;
-					}
-					else if (input == '*') {
-						inputsGiven -= 1;
-						lcd_gotoxy(inputsGiven, 1);
-						lcd_putc(' ');
-						lcd_gotoxy(inputsGiven, 1);
-					}
-				}
-				
-				input = receiveData(2000);
-				lcd_clrscr();
-				switch (input) 
-				{
-					case SETPASSWORD:
-						lcd_puts("Password set");
-						break;
-						
-					case CORRECTPASS:
-						lcd_puts("Correct password");
-						break;
-						
-					case DISARMED:
-						lcd_puts("Alarm disarmed");
-						break;
-						
-					case WRONGPASS:
-						lcd_puts("Wrong password");
-						break;
-						
-					case ALARMTIMEOUT:
-						lcd_puts("Alarm timeout");
-						break;
-						
-					default:
-						lcd_puts("input error");
-						lcd_putc(input);
-						break;
-				}
+				handleKeypadInput();
 				break;
 	
 			case TIMEOUT:
@@ -202,7 +215,6 @@ main(void)
 				lcd_putc(newState);
 				break;
 		}
-    }
-	
+	}
 	return 0;
 }
